@@ -15,6 +15,7 @@ class HelloTriangleApplication
 {
   public:
     HelloTriangleApplication();
+    ~HelloTriangleApplication();
     void run();
   private:
     void initWindow();

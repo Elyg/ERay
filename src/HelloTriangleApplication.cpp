@@ -3,7 +3,11 @@
 HelloTriangleApplication::HelloTriangleApplication()
 {
 }
-
+HelloTriangleApplication::~HelloTriangleApplication()
+{
+  //cleanup();
+  //delete m_window;
+}
 void HelloTriangleApplication::run()
 {
   initWindow();
