@@ -23,7 +23,15 @@
 int main()
 {
   HelloTriangleApplication app = HelloTriangleApplication();
-  app.run();
+  try {
+    app.run();
+  }
+  catch (const std::exception& e) {
+    std::cerr << e.what() << std::endl;
+    return EXIT_FAILURE;
+  }
+
+  return EXIT_SUCCESS;
   
   //std::cout << "Hello World!" << std::endl;
   //TestMe test1 = TestMe(5);
