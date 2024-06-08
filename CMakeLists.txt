@@ -29,6 +29,7 @@ endif()
 set(SOURCES
     "src/main.cpp"
     "src/TestMe.cpp"
+     "src/HelloTriangleApplication.cpp"
 )
 
 # Add source to this project's executable.
