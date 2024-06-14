@@ -1,7 +1,7 @@
 #include <iostream>
 #include <string>
 
-#include "HelloTriangleApplication.h"
+#include "VulkanApp.h"
 
 //#define GLM_FORCE_RADIANS
 //#define GLM_FORCE_DEPTH_ZERO_TO_ONE
@@ -22,7 +22,7 @@
 
 int main()
 {
-  HelloTriangleApplication app = HelloTriangleApplication();
+  VulkanApp app = VulkanApp();
   try {
     app.run();
   }

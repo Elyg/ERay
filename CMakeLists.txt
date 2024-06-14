@@ -45,7 +45,7 @@ add_custom_target(shaders ALL DEPENDS ${SPV_SHADERS})
 set(SOURCES
     "src/main.cpp"
     "src/TestMe.cpp"
-     "src/HelloTriangleApplication.cpp"
+    "src/VulkanApp.cpp"
 )
 
 # Add source to this project's executable.

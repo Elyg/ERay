@@ -34,11 +34,11 @@ struct SwapChainSupportDetails
   std::vector<VkPresentModeKHR> m_presentModes;
 };
 
-class HelloTriangleApplication 
+class VulkanApp 
 {
   public:
-    HelloTriangleApplication();
-    ~HelloTriangleApplication();
+    VulkanApp();
+    ~VulkanApp();
     void run();
   private:
     void initWindow();
