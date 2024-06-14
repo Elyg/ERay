@@ -32,46 +32,6 @@ int main()
   }
 
   return EXIT_SUCCESS;
-  
-  //std::cout << "Hello World!" << std::endl;
-  //TestMe test1 = TestMe(5);
-  //test1.print();
-
-  ////std::cout << "Reading File" << std::endl;
-  //UsdStageRefPtr stage = UsdStage::Open("..\\..\\..\\external\\sphere.usda");
-
-  //std::cout << "Export To String" << std::endl;
-  //std::string t;
-  //stage->ExportToString(&t);
-  //std::cout << t << std::endl;
-
-  //std::cout << "End" << std::endl;
-
-  //// GLFW and GLM
-
-  //glfwInit();
-
-  //glfwWindowHint(GLFW_CLIENT_API, GLFW_NO_API);
-  //GLFWwindow* window = glfwCreateWindow(800, 600, "Vulkan window", nullptr, nullptr);
-
-  //uint32_t extensionCount = 0;
-  //vkEnumerateInstanceExtensionProperties(nullptr, &extensionCount, nullptr);
-
-  //std::cout << extensionCount << " extensions supported\n";
-
-  //glm::mat4 matrix;
-  //glm::vec4 vec;
-  //auto test = matrix * vec;
-
-  //while (!glfwWindowShouldClose(window)) {
-  //  glfwPollEvents();
-  //}
-
-  //glfwDestroyWindow(window);
-
-  //glfwTerminate();
-
-  //return 0;
 
 }
 
