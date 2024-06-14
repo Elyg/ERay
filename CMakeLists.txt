@@ -9,7 +9,12 @@ set(EXTERNAL_LIBS "D:/Projects/ExternalLibs")
 set(USD_INSTALL_DIR "${EXTERNAL_LIBS}/src/usd_build")
 set(GLFW_INSTALL_DIR "${EXTERNAL_LIBS}/glfw-3.4.bin.WIN64")
 set(GLM_DIR "${EXTERNAL_LIBS}/glm-1.0.1")
-set(VULKAN_DIR "C:/VulkanSDK/1.3.268.0") 
+set(VULKAN_DIR "C:/VulkanSDK/1.3.268.0")
+
+set(SHADER_DIR "${CMAKE_CURRENT_SOURCE_DIR}/shaders")
+file(GLOB SHADERS ${SHADER_DIR}/*.vert ${SHADER_DIR}/*.frag ${SHADER_DIR}/*.comp ${SHADER_DIR}/*.geom ${SHADER_DIR}/*.tesc ${SHADER_DIR}/*.tese ${SHADER_DIR}/*.mesh ${SHADER_DIR}/*.task ${SHADER_DIR}/*.rgen ${SHADER_DIR}/*.rchit ${SHADER_DIR}/*.rmiss)
+
+set(Vulkan_GLSLC_EXECUTABLE "${VULKAN_DIR}/Bin/glslc.exe")
 
 project(${PROJECT_NAME} 
         VERSION 1.0 
@@ -25,6 +30,17 @@ if (POLICY CMP0141)
   set(CMAKE_MSVC_DEBUG_INFORMATION_FORMAT "$<IF:$<AND:$<C_COMPILER_ID:MSVC>,$<CXX_COMPILER_ID:MSVC>>,$<$<CONFIG:Debug,RelWithDebInfo>:EditAndContinue>,$<$<CONFIG:Debug,RelWithDebInfo>:ProgramDatabase>>")
 endif()
 
+foreach(SHADER IN LISTS SHADERS)
+    get_filename_component(FILENAME ${SHADER} NAME)
+    add_custom_command(OUTPUT ${SHADER_DIR}/compiled_shaders/${FILENAME}.spv
+        COMMAND ${Vulkan_GLSLC_EXECUTABLE} ${SHADER} -o ${SHADER_DIR}/compiled_shaders/${FILENAME}.spv
+        DEPENDS ${SHADER}
+        COMMENT "Compiling ${FILENAME}")
+list(APPEND SPV_SHADERS ${SHADER_DIR}/compiled_shaders/${FILENAME}.spv)
+endForeach()
+
+add_custom_target(shaders ALL DEPENDS ${SPV_SHADERS})
+
 # Define the source files explicitly
 set(SOURCES
     "src/main.cpp"
@@ -34,6 +50,7 @@ set(SOURCES
 
 # Add source to this project's executable.
 add_executable(${PROJECT_NAME} ${SOURCES})
+add_dependencies(${PROJECT_NAME} shaders)
 
 # Vulkan
 target_include_directories(${PROJECT_NAME} PUBLIC "${VULKAN_DIR}/include")
@@ -72,3 +89,8 @@ target_include_directories(${PROJECT_NAME} PUBLIC "${PROJECT_SOURCE_DIR}/include
 set_target_properties(${PROJECT_NAME} PROPERTIES
     RUNTIME_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/bin
 )
+if(False)
+  add_custom_command(TARGET ${PROJECT_NAME}
+                       POST_BUILD
+                       COMMAND cmd "${SCRIPTS_DIR}/compile_shaders.bat")
+endif()

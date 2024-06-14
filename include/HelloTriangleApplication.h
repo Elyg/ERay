@@ -9,6 +9,10 @@
 #include <cstring>
 #include <optional>
 #include <set>
+#include <cstdint> // Necessary for uint32_t
+#include <limits> // Necessary for std::numeric_limits
+#include <algorithm> // Necessary for std::clamp
+#include <fstream>
 
 #define GLFW_INCLUDE_VULKAN
 #include <GLFW/glfw3.h>
@@ -21,6 +25,13 @@ struct QueueFamilyIndices
   {
     return m_graphicsFamily.has_value() && m_presentFamily.has_value();
   }
+};
+
+struct SwapChainSupportDetails 
+{
+  VkSurfaceCapabilitiesKHR m_capabilities;
+  std::vector<VkSurfaceFormatKHR> m_formats;
+  std::vector<VkPresentModeKHR> m_presentModes;
 };
 
 class HelloTriangleApplication 
@@ -42,9 +53,26 @@ class HelloTriangleApplication
     bool isDeviceSuitable(VkPhysicalDevice device);
     void createLogicalDevice();
     void createSurface();
+    bool checkDeviceExtensionSupport(VkPhysicalDevice device);
+    SwapChainSupportDetails querySwapChainSupport(VkPhysicalDevice device);
+    VkSurfaceFormatKHR chooseSwapSurfaceFormat(const std::vector<VkSurfaceFormatKHR>& availableFormats);
+    VkPresentModeKHR chooseSwapPresentMode(const std::vector<VkPresentModeKHR>& availablePresentModes);
+    VkExtent2D chooseSwapExtent(const VkSurfaceCapabilitiesKHR& capabilities);
+    void createSwapChain();
+    void createImageViews();
+    void createGraphicsPipeline();
+    void createRenderPass();
+    void createFramebuffers();
+    void createCommandPool();
+    void createCommandBuffer();
+    void recordCommandBuffer(VkCommandBuffer commandBuffer, uint32_t imageIndex);
+    void drawFrame();
+    void createSyncObjects();
 
-    //uint32_t findQueueFamilies(VkPhysicalDevice device);
     QueueFamilyIndices findQueueFamilies(VkPhysicalDevice device);
+
+    static std::vector<char> readFile(const std::string& filename);
+    VkShaderModule createShaderModule(const std::vector<char>& code);
 
     std::vector<const char*> getRequiredExtensions();
 
@@ -74,8 +102,29 @@ class HelloTriangleApplication
     VkSurfaceKHR m_surface;
     VkQueue m_presentQueue;
     VkDebugUtilsMessengerEXT m_debugMessenger;
-    const std::vector<const char*> m_validationLayers = {
+    VkSwapchainKHR m_swapChain;
+    std::vector<VkImage> m_swapChainImages;
+    VkFormat m_swapChainImageFormat;
+    VkExtent2D m_swapChainExtent;
+    std::vector<VkImageView> m_swapChainImageViews;
+    VkRenderPass m_renderPass;
+    VkPipelineLayout m_pipelineLayout;
+    VkPipeline m_graphicsPipeline;
+    std::vector<VkFramebuffer> m_swapChainFramebuffers;
+    VkCommandPool m_commandPool;
+    VkCommandBuffer m_commandBuffer;
+    VkSemaphore m_imageAvailableSemaphore;
+    VkSemaphore m_renderFinishedSemaphore;
+    VkFence m_inFlightFence;
+
+    const std::vector<const char*> m_validationLayers = 
+    {
       "VK_LAYER_KHRONOS_validation" // standard useful validation layer
+    };
+
+    const std::vector<const char*> deviceExtensions = 
+    {
+      VK_KHR_SWAPCHAIN_EXTENSION_NAME
     };
 
   #ifdef NDEBUG
