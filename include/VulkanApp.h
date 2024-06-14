@@ -13,9 +13,12 @@
 #include <limits> // Necessary for std::numeric_limits
 #include <algorithm> // Necessary for std::clamp
 #include <fstream>
+#include <filesystem>
 
 #define GLFW_INCLUDE_VULKAN
 #include <GLFW/glfw3.h>
+
+const int MAX_FRAMES_IN_FLIGHT = 2;
 
 struct QueueFamilyIndices
 {
@@ -64,10 +67,14 @@ class VulkanApp
     void createRenderPass();
     void createFramebuffers();
     void createCommandPool();
-    void createCommandBuffer();
+    void createCommandBuffers();
     void recordCommandBuffer(VkCommandBuffer commandBuffer, uint32_t imageIndex);
     void drawFrame();
     void createSyncObjects();
+    void createTextureImage();
+    void recreateSwapChain();
+    void cleanupSwapChain();
+    static void framebufferResizeCallback(GLFWwindow* window, int width, int height);
 
     QueueFamilyIndices findQueueFamilies(VkPhysicalDevice device);
 
@@ -112,10 +119,17 @@ class VulkanApp
     VkPipeline m_graphicsPipeline;
     std::vector<VkFramebuffer> m_swapChainFramebuffers;
     VkCommandPool m_commandPool;
-    VkCommandBuffer m_commandBuffer;
-    VkSemaphore m_imageAvailableSemaphore;
-    VkSemaphore m_renderFinishedSemaphore;
-    VkFence m_inFlightFence;
+
+    std::vector<VkCommandBuffer> m_commandBuffers;
+    std::vector<VkSemaphore> m_imageAvailableSemaphores;
+    std::vector<VkSemaphore> m_renderFinishedSemaphores;
+    std::vector<VkFence> m_inFlightFences;
+
+    VkBuffer m_stagingBuffer;
+    VkDeviceMemory m_stagingBufferMemory;
+
+    uint32_t m_currentFrame = 0;
+    bool m_framebufferResized = false;
 
     const std::vector<const char*> m_validationLayers = 
     {

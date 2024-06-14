@@ -1,5 +1,10 @@
 #include "VulkanApp.h"
 
+#define STB_IMAGE_IMPLEMENTATION
+#include <stb_image.h>
+
+
+
 VulkanApp::VulkanApp()
 {
 }
@@ -22,8 +27,10 @@ void VulkanApp::initWindow()
 {
   glfwInit();
   glfwWindowHint(GLFW_CLIENT_API, GLFW_NO_API);
-  glfwWindowHint(GLFW_RESIZABLE, GLFW_FALSE);
+  glfwWindowHint(GLFW_RESIZABLE, GLFW_TRUE);
   m_window = glfwCreateWindow(m_width, m_height, "Vulkan", nullptr, nullptr);
+  glfwSetWindowUserPointer(m_window, this);
+  glfwSetFramebufferSizeCallback(m_window, framebufferResizeCallback);
 }
 
 void VulkanApp::initVulkan()
@@ -39,7 +46,8 @@ void VulkanApp::initVulkan()
   createGraphicsPipeline();
   createFramebuffers();
   createCommandPool();
-  createCommandBuffer();
+  createTextureImage();
+  createCommandBuffers();
   createSyncObjects();
 }
 
@@ -50,9 +58,73 @@ void VulkanApp::mainLoop()
     glfwPollEvents();
     drawFrame();
   }
+  vkDeviceWaitIdle(m_device);
 }
+
+void VulkanApp::createTextureImage()
+{
+  int texWidth, texHeight, texChannels;
+
+  std::string path = "..\\..\\..\\textures\\texture.jpg";
+  if (!std::filesystem::exists(path))
+  {
+    throw std::runtime_error("failed to find texture image from given path!");
+  }
+
+  stbi_uc* pixels = stbi_load(path.data(), &texWidth, &texHeight, &texChannels, STBI_rgb_alpha);
+  VkDeviceSize imageSize = texWidth * texHeight * 4;
+
+  if (!pixels) {
+    throw std::runtime_error("failed to load texture image!");
+  }
+
+  //VulkanApp::createBuffer(imageSize, VK_BUFFER_USAGE_TRANSFER_SRC_BIT, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT, stagingBuffer, stagingBufferMemory);
+
+}
+
+void VulkanApp::framebufferResizeCallback(GLFWwindow* window, int width, int height)
+{
+  auto app = reinterpret_cast<VulkanApp*>(glfwGetWindowUserPointer(window));
+  app->m_framebufferResized = true;
+}
+
+void VulkanApp::cleanupSwapChain() {
+  for (auto framebuffer : m_swapChainFramebuffers) {
+    vkDestroyFramebuffer(m_device, framebuffer, nullptr);
+  }
+
+  for (auto imageView : m_swapChainImageViews) {
+    vkDestroyImageView(m_device, imageView, nullptr);
+  }
+
+  vkDestroySwapchainKHR(m_device, m_swapChain, nullptr);
+}
+
+void VulkanApp::recreateSwapChain() 
+{
+  int width = 0, height = 0;
+  glfwGetFramebufferSize(m_window, &width, &height);
+  while (width == 0 || height == 0) 
+  {
+    glfwGetFramebufferSize(m_window, &width, &height);
+    glfwWaitEvents();
+  }
+  
+  vkDeviceWaitIdle(m_device);
+
+  cleanupSwapChain();
+
+  createSwapChain();
+  createImageViews();
+  createFramebuffers();
+}
+
 void VulkanApp::createSyncObjects()
 {
+  m_imageAvailableSemaphores.resize(MAX_FRAMES_IN_FLIGHT);
+  m_renderFinishedSemaphores.resize(MAX_FRAMES_IN_FLIGHT);
+  m_inFlightFences.resize(MAX_FRAMES_IN_FLIGHT);
+  
   VkSemaphoreCreateInfo semaphoreInfo{};
   semaphoreInfo.sType = VK_STRUCTURE_TYPE_SEMAPHORE_CREATE_INFO;
 
@@ -61,41 +133,55 @@ void VulkanApp::createSyncObjects()
   fenceInfo.flags = VK_FENCE_CREATE_SIGNALED_BIT;
 
 
-  if (vkCreateSemaphore(m_device, &semaphoreInfo, nullptr, &m_imageAvailableSemaphore) != VK_SUCCESS ||
-    vkCreateSemaphore(m_device, &semaphoreInfo, nullptr, &m_renderFinishedSemaphore) != VK_SUCCESS ||
-    vkCreateFence(m_device, &fenceInfo, nullptr, &m_inFlightFence) != VK_SUCCESS) 
+  for (size_t i = 0; i < MAX_FRAMES_IN_FLIGHT; i++) 
   {
-    throw std::runtime_error("failed to create semaphores!");
+    if (vkCreateSemaphore(m_device, &semaphoreInfo, nullptr, &m_imageAvailableSemaphores[i]) != VK_SUCCESS ||
+      vkCreateSemaphore(m_device, &semaphoreInfo, nullptr, &m_renderFinishedSemaphores[i]) != VK_SUCCESS ||
+      vkCreateFence(m_device, &fenceInfo, nullptr, &m_inFlightFences[i]) != VK_SUCCESS) {
+
+      throw std::runtime_error("failed to create synchronization objects for a frame!");
+    }
   }
 }
+
 void VulkanApp::drawFrame()
 {
-  vkWaitForFences(m_device, 1, &m_inFlightFence, VK_TRUE, UINT64_MAX);
-  vkResetFences(m_device, 1, &m_inFlightFence);
+  vkWaitForFences(m_device, 1, &m_inFlightFences[m_currentFrame], VK_TRUE, UINT64_MAX);
 
   uint32_t imageIndex;
-  vkAcquireNextImageKHR(m_device, m_swapChain, UINT64_MAX, m_imageAvailableSemaphore, VK_NULL_HANDLE, &imageIndex);
+  VkResult result = vkAcquireNextImageKHR(m_device, m_swapChain, UINT64_MAX, m_imageAvailableSemaphores[m_currentFrame], VK_NULL_HANDLE, &imageIndex);
 
-  vkResetCommandBuffer(m_commandBuffer, /*VkCommandBufferResetFlagBits*/ 0);
-  recordCommandBuffer(m_commandBuffer, imageIndex);
+  if (result == VK_ERROR_OUT_OF_DATE_KHR) 
+  {
+    recreateSwapChain();
+    return;
+  }
+  else if (result != VK_SUCCESS && result != VK_SUBOPTIMAL_KHR) 
+  {
+    throw std::runtime_error("failed to acquire swap chain image!");
+  }
+  vkResetFences(m_device, 1, &m_inFlightFences[m_currentFrame]);
+
+  vkResetCommandBuffer(m_commandBuffers[m_currentFrame], /*VkCommandBufferResetFlagBits*/ 0);
+  recordCommandBuffer(m_commandBuffers[m_currentFrame], imageIndex);
 
   VkSubmitInfo submitInfo{};
   submitInfo.sType = VK_STRUCTURE_TYPE_SUBMIT_INFO;
 
-  VkSemaphore waitSemaphores[] = { m_imageAvailableSemaphore };
+  VkSemaphore waitSemaphores[] = { m_imageAvailableSemaphores[m_currentFrame] };
   VkPipelineStageFlags waitStages[] = { VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT };
   submitInfo.waitSemaphoreCount = 1;
   submitInfo.pWaitSemaphores = waitSemaphores;
   submitInfo.pWaitDstStageMask = waitStages;
 
   submitInfo.commandBufferCount = 1;
-  submitInfo.pCommandBuffers = &m_commandBuffer;
+  submitInfo.pCommandBuffers = &m_commandBuffers[m_currentFrame];
 
-  VkSemaphore signalSemaphores[] = { m_renderFinishedSemaphore };
+  VkSemaphore signalSemaphores[] = { m_renderFinishedSemaphores[m_currentFrame] };
   submitInfo.signalSemaphoreCount = 1;
   submitInfo.pSignalSemaphores = signalSemaphores;
 
-  if (vkQueueSubmit(m_graphicsQueue, 1, &submitInfo, m_inFlightFence) != VK_SUCCESS)
+  if (vkQueueSubmit(m_graphicsQueue, 1, &submitInfo, m_inFlightFences[m_currentFrame]) != VK_SUCCESS)
   {
     throw std::runtime_error("failed to submit draw command buffer!");
   }
@@ -112,7 +198,20 @@ void VulkanApp::drawFrame()
 
   presentInfo.pImageIndices = &imageIndex;
 
-  vkQueuePresentKHR(m_presentQueue, &presentInfo);
+  result = vkQueuePresentKHR(m_presentQueue, &presentInfo);
+
+  if (result == VK_ERROR_OUT_OF_DATE_KHR || result == VK_SUBOPTIMAL_KHR || m_framebufferResized) 
+  {
+    m_framebufferResized = false;
+    recreateSwapChain();
+  }
+  else if (result != VK_SUCCESS) 
+  {
+    throw std::runtime_error("failed to present swap chain image!");
+  }
+
+
+  m_currentFrame = (m_currentFrame + 1) % MAX_FRAMES_IN_FLIGHT;
 
 }
 
@@ -163,15 +262,18 @@ void VulkanApp::recordCommandBuffer(VkCommandBuffer commandBuffer, uint32_t imag
   }
 }
 
-void VulkanApp::createCommandBuffer()
+void VulkanApp::createCommandBuffers()
 {
+  
+  m_commandBuffers.resize(MAX_FRAMES_IN_FLIGHT);
+  
   VkCommandBufferAllocateInfo allocInfo{};
   allocInfo.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO;
   allocInfo.commandPool = m_commandPool;
   allocInfo.level = VK_COMMAND_BUFFER_LEVEL_PRIMARY;
-  allocInfo.commandBufferCount = 1;
+  allocInfo.commandBufferCount = (uint32_t)m_commandBuffers.size();
 
-  if (vkAllocateCommandBuffers(m_device, &allocInfo, &m_commandBuffer) != VK_SUCCESS) 
+  if (vkAllocateCommandBuffers(m_device, &allocInfo, m_commandBuffers.data()) != VK_SUCCESS)
   {
     throw std::runtime_error("failed to allocate command buffers!");
   }
@@ -924,22 +1026,20 @@ void VulkanApp::DestroyDebugUtilsMessengerEXT(VkInstance instance,
 
 void VulkanApp::cleanup()
 {
-  vkDestroySemaphore(m_device, m_imageAvailableSemaphore, nullptr);
-  vkDestroySemaphore(m_device, m_renderFinishedSemaphore, nullptr);
-  vkDestroyFence(m_device, m_inFlightFence, nullptr);
-  vkDestroyCommandPool(m_device, m_commandPool, nullptr);
-  for (auto framebuffer : m_swapChainFramebuffers) 
-  {
-    vkDestroyFramebuffer(m_device, framebuffer, nullptr);
-  }
+  cleanupSwapChain();
   vkDestroyPipeline(m_device, m_graphicsPipeline, nullptr);
   vkDestroyPipelineLayout(m_device, m_pipelineLayout, nullptr);
+
   vkDestroyRenderPass(m_device, m_renderPass, nullptr);
-  for (auto imageView : m_swapChainImageViews) 
+
+  for (size_t i = 0; i < MAX_FRAMES_IN_FLIGHT; i++)
   {
-    vkDestroyImageView(m_device, imageView, nullptr);
+    vkDestroySemaphore(m_device, m_renderFinishedSemaphores[i], nullptr);
+    vkDestroySemaphore(m_device, m_imageAvailableSemaphores[i], nullptr);
+    vkDestroyFence(m_device, m_inFlightFences[i], nullptr);
   }
-  vkDestroySwapchainKHR(m_device, m_swapChain, nullptr);
+
+  vkDestroyCommandPool(m_device, m_commandPool, nullptr);
   vkDestroyDevice(m_device, nullptr);
 
   if (m_enableValidationLayers)
@@ -948,6 +1048,7 @@ void VulkanApp::cleanup()
   }
   vkDestroySurfaceKHR(m_instance, m_surface, nullptr);
   vkDestroyInstance(m_instance, nullptr);
+
   glfwDestroyWindow(m_window);
   glfwTerminate();
 };

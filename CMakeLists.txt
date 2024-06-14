@@ -84,7 +84,7 @@ target_link_libraries(${PROJECT_NAME} usd)
 
 # Target include headers
 target_include_directories(${PROJECT_NAME} PUBLIC "${PROJECT_SOURCE_DIR}/include")
-
+target_include_directories(${PROJECT_NAME} PUBLIC "${PROJECT_SOURCE_DIR}/external/stb_image")
 # Set the output directory for the executable
 set_target_properties(${PROJECT_NAME} PROPERTIES
     RUNTIME_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/bin
