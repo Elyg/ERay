@@ -45,7 +45,8 @@ void VulkanApp::initVulkan()
   createGraphicsPipeline();
   createFramebuffers();
   createCommandPool();
-  createTextureImage();
+  //createTextureImage();
+  createTextureImageFromArray(m_currentFrame);
   createTextureImageView();
   createTextureSampler();
   createVertexBuffer();
@@ -59,11 +60,38 @@ void VulkanApp::initVulkan()
 
 void VulkanApp::mainLoop()
 {
+  static auto startTime = std::chrono::high_resolution_clock::now();
+
+  auto timer = [this]()
+    {
+      while (true) 
+      {
+        std::this_thread::sleep_for(std::chrono::seconds(1));
+        this->createTextureImageFromArray(this->getTimeFrame());
+        this->createTextureImageView();
+        this->createTextureSampler();
+        this->createVertexBuffer();
+        this->createIndexBuffer();
+        this->createUniformBuffers();
+        this->createDescriptorPool();
+        this->createDescriptorSets();
+        this->createCommandBuffers();
+        this->drawFrame();
+        std::cout << "Draw frame: " << this->getTimeFrame() << std::endl;
+        if (glfwWindowShouldClose(this->m_window))
+        {
+          break;
+        } 
+      }
+    };
+  std::thread timerThread(timer);
+
   while (!glfwWindowShouldClose(m_window)) 
   {
     glfwPollEvents();
-    drawFrame();
+    //std::cout << "Draw frame: " << getTimeFrame() << std::endl;
   }
+  timerThread.join();
   vkDeviceWaitIdle(m_device);
 }
 
@@ -129,6 +157,124 @@ VkImageView VulkanApp::createImageView(VkImage image, VkFormat format)
 
   return imageView;
 }
+std::vector<unsigned char> VulkanApp::trace()
+{
+  auto aspect_ratio = m_width / m_height;
+  int image_width = m_width;
+  int image_height = m_height;
+
+  // Calculate the image height, and ensure that it's at least 1.
+  //int image_height = int(image_width / aspect_ratio);
+  //image_height = (image_height < 1) ? 1 : image_height;
+
+  // Camera
+
+  auto focal_length = 1.0;
+  auto viewport_height = 2.0;
+  auto viewport_width = viewport_height * (double(image_width) / image_height);
+
+  std::cout << "Viewport height: " << viewport_height << "Viewport width: " << viewport_width << std::endl;
+
+  auto camera_center = glm::vec3(0, 0, 0);
+
+  // Calculate the vectors across the horizontal and down the vertical viewport edges.
+  auto viewport_u = glm::vec3(viewport_width, 0, 0);
+  auto viewport_v = glm::vec3(0, -viewport_height, 0);
+
+  // Calculate the horizontal and vertical delta vectors from pixel to pixel.
+  auto pixel_delta_u = viewport_u / glm::vec3(image_width);
+  auto pixel_delta_v = viewport_v / glm::vec3(image_height);
+
+  // Calculate the location of the upper left pixel.
+  auto viewport_upper_left = camera_center - glm::vec3(0, 0, focal_length) - viewport_u / glm::vec3(2) - viewport_v / glm::vec3(2);
+  auto pixel00_loc = viewport_upper_left + glm::vec3(0.5) * (pixel_delta_u + pixel_delta_v);
+
+  std::vector<unsigned char> pixels(m_width * m_height * 4);
+  for (int j = 0; j < m_height; j++) 
+  {
+    std::cout << "\rScanlines remaining: " << (m_height - j) << ' ' << std::flush;
+    for (int i = 0; i < m_width; i++) 
+    {
+      auto pixel_center = pixel00_loc + (glm::vec3(i) * pixel_delta_u) + (glm::vec3(j) * pixel_delta_v);
+      auto ray_direction = pixel_center - camera_center;
+      Ray r(camera_center, ray_direction);
+
+      glm::vec3 pixel_color = RayUtils::ray_color(r);
+      pixels[i] = static_cast<unsigned char>(255.999 * pixel_color[0]);
+      pixels[i] = static_cast<unsigned char>(255.999 * pixel_color[1]);
+      pixels[i] = static_cast<unsigned char>(255.999 * pixel_color[2]);
+      pixels[i] = static_cast<unsigned char>(255);
+    }
+  }
+
+  return pixels;
+}
+void VulkanApp::createTextureImageFromArray(uint32_t seed)
+{
+  //int texWidth, texHeight, texChannels;
+
+  //std::string path = "..\\..\\..\\textures\\texture.jpg";
+  //if (!std::filesystem::exists(path))
+  //{
+  //  throw std::runtime_error("failed to find texture image from given path!");
+  //}
+  //std::cout << path << std::filesystem::exists(path) << std::endl;
+
+  //stbi_uc* pixels = stbi_load(path.data(), &texWidth, &texHeight, &texChannels, STBI_rgb_alpha);
+
+  int texWidth = 1920;
+  int texHeight = 1080;
+
+ // unsigned char *img = new unsigned char[x*y]
+
+  //std::random_device random_device; // create object for seeding
+  //std::mt19937 engine{ seed }; // create engine and seed it
+  //std::uniform_int_distribution<> dist(1, 255); // create distribution for integers with [1; 9] range
+  // // finally get a pseudo-random integer number
+  //std::cout << seed << std::endl;
+  //std::vector<unsigned char> pixels (texWidth * texHeight * 4);
+  //for (int i = 0; i < pixels.size(); ++i)
+  //{
+  //  char random_number = dist(engine);
+  //  pixels[i] = random_number; // Assign values 0 to 9
+  //  if (i == 0)
+  //  {
+  //    std::cout << static_cast<int>(random_number) << std::endl;
+  //  }
+  //}
+
+  std::vector<unsigned char> pixels = trace();
+
+  // std::cout << std::reduce(pixels.begin(), pixels.end()) << std::endl;
+  VkDeviceSize imageSize = pixels.size();// texWidth* texHeight * 4;
+
+  if (pixels.empty()) 
+  {
+    throw std::runtime_error("failed to load texture image!");
+  }
+
+  createBuffer(imageSize, VK_BUFFER_USAGE_TRANSFER_SRC_BIT, 
+    VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT, m_stagingBuffer, m_stagingBufferMemory);
+
+  void* data;
+  vkMapMemory(m_device, m_stagingBufferMemory, 0, imageSize, 0, &data);
+  memcpy(data, pixels.data(), static_cast<size_t>(imageSize));
+  vkUnmapMemory(m_device, m_stagingBufferMemory);
+
+  pixels.clear();
+  //stbi_image_free(pixels);
+
+  createImage(texWidth, texHeight, VK_FORMAT_R8G8B8A8_SRGB, VK_IMAGE_TILING_OPTIMAL, 
+                                  VK_IMAGE_USAGE_TRANSFER_DST_BIT | VK_IMAGE_USAGE_SAMPLED_BIT, 
+                            VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, m_textureImage, m_textureImageMemory);
+
+  transitionImageLayout(m_textureImage, VK_FORMAT_R8G8B8A8_SRGB, VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL);
+  copyBufferToImage(m_stagingBuffer, m_textureImage, static_cast<uint32_t>(texWidth), static_cast<uint32_t>(texHeight));
+  transitionImageLayout(m_textureImage, VK_FORMAT_R8G8B8A8_SRGB, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL);
+
+  vkDestroyBuffer(m_device, m_stagingBuffer, nullptr);
+  vkFreeMemory(m_device, m_stagingBufferMemory, nullptr);
+}
 
 void VulkanApp::createTextureImage()
 {
@@ -144,12 +290,12 @@ void VulkanApp::createTextureImage()
   stbi_uc* pixels = stbi_load(path.data(), &texWidth, &texHeight, &texChannels, STBI_rgb_alpha);
   VkDeviceSize imageSize = texWidth * texHeight * 4;
 
-  if (!pixels) 
+  if (!pixels)
   {
     throw std::runtime_error("failed to load texture image!");
   }
 
-  createBuffer(imageSize, VK_BUFFER_USAGE_TRANSFER_SRC_BIT, 
+  createBuffer(imageSize, VK_BUFFER_USAGE_TRANSFER_SRC_BIT,
     VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT, m_stagingBuffer, m_stagingBufferMemory);
 
   void* data;
@@ -159,15 +305,14 @@ void VulkanApp::createTextureImage()
 
   stbi_image_free(pixels);
 
-  createImage(texWidth, texHeight, VK_FORMAT_R8G8B8A8_SRGB, VK_IMAGE_TILING_OPTIMAL, 
-                                  VK_IMAGE_USAGE_TRANSFER_DST_BIT | VK_IMAGE_USAGE_SAMPLED_BIT, 
-                            VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, m_textureImage, m_textureImageMemory);
+  createImage(texWidth, texHeight, VK_FORMAT_R8G8B8A8_SRGB, VK_IMAGE_TILING_OPTIMAL,
+    VK_IMAGE_USAGE_TRANSFER_DST_BIT | VK_IMAGE_USAGE_SAMPLED_BIT,
+    VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, m_textureImage, m_textureImageMemory);
 
-  transitionImageLayout(m_textureImage, VK_FORMAT_R8G8B8A8_SRGB, 
-                                        VK_IMAGE_LAYOUT_UNDEFINED, 
-                                        VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL);
-  copyBufferToImage(m_stagingBuffer, m_textureImage, static_cast<uint32_t>(texWidth), 
-                                    static_cast<uint32_t>(texHeight));
+  transitionImageLayout(m_textureImage, VK_FORMAT_R8G8B8A8_SRGB, VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL);
+  copyBufferToImage(m_stagingBuffer, m_textureImage, static_cast<uint32_t>(texWidth), static_cast<uint32_t>(texHeight));
+  transitionImageLayout(m_textureImage, VK_FORMAT_R8G8B8A8_SRGB, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL);
+
   vkDestroyBuffer(m_device, m_stagingBuffer, nullptr);
   vkFreeMemory(m_device, m_stagingBufferMemory, nullptr);
 }
@@ -385,6 +530,7 @@ void VulkanApp::createSyncObjects()
 
 void VulkanApp::drawFrame()
 {
+  
   vkWaitForFences(m_device, 1, &m_inFlightFences[m_currentFrame], VK_TRUE, UINT64_MAX);
 
   uint32_t imageIndex;
@@ -401,7 +547,7 @@ void VulkanApp::drawFrame()
   }
 
   updateUniformBuffer(m_currentFrame);
-
+  createTextureImageFromArray(getTimeFrame());
   vkResetFences(m_device, 1, &m_inFlightFences[m_currentFrame]);
 
   vkResetCommandBuffer(m_commandBuffers[m_currentFrame], /*VkCommandBufferResetFlagBits*/ 0);
@@ -454,7 +600,7 @@ void VulkanApp::drawFrame()
 
 
   m_currentFrame = (m_currentFrame + 1) % MAX_FRAMES_IN_FLIGHT;
-
+  m_timeFrame += 1;
 }
 
 void VulkanApp::createDescriptorSets()
@@ -540,13 +686,15 @@ void VulkanApp::updateUniformBuffer(uint32_t currentFrame)
   float time = std::chrono::duration<float, std::chrono::seconds::period>(currentTime - startTime).count();
 
   UniformBufferObject ubo{};
-  ubo.model = glm::rotate(glm::mat4(1.0f), time * glm::radians(90.0f), glm::vec3(0.0f, 0.0f, 1.0f));
+  ubo.model = glm::mat4(1.0f);
+  ubo.view = glm::mat4(1.0f);
+  ubo.proj = glm::mat4(1.0f);
+  
+  //ubo.model = glm::rotate(glm::mat4(1.0f), time * glm::radians(90.0f), glm::vec3(0.0f, 0.0f, 1.0f));
+  //ubo.view = glm::lookAt(glm::vec3(2.0f, 2.0f, 2.0f), glm::vec3(0.0f, 0.0f, 0.0f), glm::vec3(0.0f, 0.0f, 1.0f));
+  //ubo.proj = glm::perspective(glm::radians(45.0f), m_swapChainExtent.width / (float)m_swapChainExtent.height, 0.1f, 10.0f);
 
-  ubo.view = glm::lookAt(glm::vec3(2.0f, 2.0f, 2.0f), glm::vec3(0.0f, 0.0f, 0.0f), glm::vec3(0.0f, 0.0f, 1.0f));
-
-  ubo.proj = glm::perspective(glm::radians(45.0f), m_swapChainExtent.width / (float)m_swapChainExtent.height, 0.1f, 10.0f);
-
-  ubo.proj[1][1] *= -1;
+  //ubo.proj[1][1] *= -1;
 
   memcpy(m_uniformBuffersMapped[m_currentFrame], &ubo, sizeof(ubo));
 
@@ -897,7 +1045,7 @@ void VulkanApp::createGraphicsPipeline()
   rasterizer.rasterizerDiscardEnable = VK_FALSE;
   rasterizer.polygonMode = VK_POLYGON_MODE_FILL;
   rasterizer.lineWidth = 1.0f;
-  rasterizer.cullMode = VK_CULL_MODE_BACK_BIT;
+  rasterizer.cullMode = VK_CULL_MODE_NONE;// VK_CULL_MODE_BACK_BIT;
   rasterizer.frontFace = VK_FRONT_FACE_COUNTER_CLOCKWISE;
   rasterizer.depthBiasEnable = VK_FALSE;
   rasterizer.depthBiasConstantFactor = 0.0f; // Optional
@@ -984,13 +1132,10 @@ void VulkanApp::createRenderPass()
   VkAttachmentDescription colorAttachment{};
   colorAttachment.format = m_swapChainImageFormat;
   colorAttachment.samples = VK_SAMPLE_COUNT_1_BIT;
-
   colorAttachment.loadOp = VK_ATTACHMENT_LOAD_OP_CLEAR;
   colorAttachment.storeOp = VK_ATTACHMENT_STORE_OP_STORE;
-
   colorAttachment.stencilLoadOp = VK_ATTACHMENT_LOAD_OP_DONT_CARE;
   colorAttachment.stencilStoreOp = VK_ATTACHMENT_STORE_OP_DONT_CARE;
-
   colorAttachment.initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
   colorAttachment.finalLayout = VK_IMAGE_LAYOUT_PRESENT_SRC_KHR;
 
@@ -1228,8 +1373,13 @@ bool VulkanApp::isDeviceSuitable(VkPhysicalDevice device)
   VkPhysicalDeviceFeatures supportedFeatures;
   vkGetPhysicalDeviceFeatures(device, &supportedFeatures);
 
+  VkPhysicalDeviceProperties deviceProperties;
+  vkGetPhysicalDeviceProperties(device, &deviceProperties);
+  
 
-  return indices.isComplete() && extensionsSupported && swapChainAdequate && supportedFeatures.samplerAnisotropy;;
+
+  return indices.isComplete() && extensionsSupported && swapChainAdequate && supportedFeatures.samplerAnisotropy 
+         && deviceProperties.deviceType == VK_PHYSICAL_DEVICE_TYPE_DISCRETE_GPU;
 }
 
 bool VulkanApp::checkDeviceExtensionSupport(VkPhysicalDevice device)
@@ -1263,6 +1413,12 @@ void VulkanApp::pickPhysicalDevice()
   for (const auto& device : devices) {
     if (isDeviceSuitable(device)) {
       m_physicalDevice = device;
+
+      VkPhysicalDeviceProperties deviceProperties;
+      vkGetPhysicalDeviceProperties(device, &deviceProperties);
+
+      std::cout << "Found Device Name:" << deviceProperties.deviceName << std::endl;
+      
       break;
     }
   }

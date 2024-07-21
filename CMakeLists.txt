@@ -46,6 +46,8 @@ set(SOURCES
     "src/main.cpp"
     "src/TestMe.cpp"
     "src/VulkanApp.cpp"
+    "src/Ray.cpp"
+    "src/RayUtils.cpp"
 )
 
 # Add source to this project's executable.

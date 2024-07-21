@@ -16,18 +16,26 @@
 #include <filesystem>
 #include <array>
 #include <chrono>
+#include <random>
+#include <thread>
+#include <numeric>
 
 #define GLM_FORCE_RADIANS
 #define GLM_FORCE_DEFAULT_ALIGNED_GENTYPES
 #include <glm/glm.hpp>
 #include <glm/gtc/matrix_transform.hpp>
 
-
-
 #define GLFW_INCLUDE_VULKAN
 #include <GLFW/glfw3.h>
 
+//#define STB_IMAGE_IMPLEMENTATION
+//#include <stb_image.h>
+
+#include "Ray.h"
+#include "RayUtils.h"
+
 const int MAX_FRAMES_IN_FLIGHT = 2;
+
 
 struct QueueFamilyIndices
 {
@@ -84,11 +92,17 @@ struct Vertex {
   }
 };
 
+//const std::vector<Vertex> vertices = {
+//    {{-0.5f, -0.5f}, {1.0f, 0.0f, 0.0f}, {1.0f, 0.0f}},
+//    {{0.5f, -0.5f}, {0.0f, 1.0f, 0.0f}, {0.0f, 0.0f}},
+//    {{0.5f, 0.5f}, {0.0f, 0.0f, 1.0f}, {0.0f, 1.0f}},
+//    {{-0.5f, 0.5f}, {1.0f, 1.0f, 1.0f}, {1.0f, 1.0f}}
+//};
 const std::vector<Vertex> vertices = {
-    {{-0.5f, -0.5f}, {1.0f, 0.0f, 0.0f}, {1.0f, 0.0f}},
-    {{0.5f, -0.5f}, {0.0f, 1.0f, 0.0f}, {0.0f, 0.0f}},
-    {{0.5f, 0.5f}, {0.0f, 0.0f, 1.0f}, {0.0f, 1.0f}},
-    {{-0.5f, 0.5f}, {1.0f, 1.0f, 1.0f}, {1.0f, 1.0f}}
+    {{-1.0f, -1.0f}, {1.0f, 0.0f, 0.0f}, {1.0f, 0.0f}},
+    {{1.0f, -1.0f}, {0.0f, 1.0f, 0.0f}, {0.0f, 0.0f}},
+    {{1.0f, 1.0f}, {0.0f, 0.0f, 1.0f}, {0.0f, 1.0f}},
+    {{-1.0f, 1.0f}, {1.0f, 1.0f, 1.0f}, {1.0f, 1.0f}}
 };
 
 const std::vector<uint16_t> indices = 
@@ -138,6 +152,7 @@ class VulkanApp
     void drawFrame();
     void createSyncObjects();
     void createTextureImage();
+    void createTextureImageFromArray(uint32_t seed);
     void recreateSwapChain();
     void cleanupSwapChain();
     void createBuffer(VkDeviceSize size, VkBufferUsageFlags usage, VkMemoryPropertyFlags properties, VkBuffer& buffer, VkDeviceMemory& bufferMemory);
@@ -157,7 +172,7 @@ class VulkanApp
     void createTextureImageView();
     VkImageView createImageView(VkImage image, VkFormat format);
     void createTextureSampler();
-
+    uint32_t getTimeFrame() { return m_timeFrame; }
 
     uint32_t findMemoryType(uint32_t typeFilter, VkMemoryPropertyFlags properties);
     static void framebufferResizeCallback(GLFWwindow* window, int width, int height);
@@ -168,6 +183,9 @@ class VulkanApp
     VkShaderModule createShaderModule(const std::vector<char>& code);
 
     std::vector<const char*> getRequiredExtensions();
+
+    std::vector<unsigned char> trace();
+
 
     static VKAPI_ATTR VkBool32 VKAPI_CALL debugCallback(
       VkDebugUtilsMessageSeverityFlagBitsEXT messageSeverity,
@@ -216,6 +234,7 @@ class VulkanApp
 
     uint32_t m_currentFrame = 0;
     bool m_framebufferResized = false;
+    uint32_t m_timeFrame = 0;
 
     VkBuffer m_vertexBuffer;
     VkDeviceMemory m_vertexBufferMemory;
